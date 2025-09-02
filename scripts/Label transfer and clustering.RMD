@@ -1,0 +1,196 @@
+
+# Computing synchronized age
+```{r}
+pred_time_iter = c("pred.age","pred.age.2nd","pred.age.3rd","pred.age.4th","pred.age.5th","pred.age.6th","pred.age.7th","pred.age.8th","pred.age.9th","pred.age.10th")
+
+pred.age.df.list = list()
+for(kk in 2:length(pred_time_iter)){
+  
+  pred.age.time_i = pred_time_iter[kk]
+  pred.age.time_j = pred_time_iter[kk-1]
+  print(c(pred.age.time_i,pred.age.time_j))
+  
+data.cells = rownames(umap.all)#metadata.clean$sample_id
+load(paste0(pred.age.time_j,".rda"))
+
+uniq.age.grp = (unique(pred.age.df[data.cells,"pred.age"]))
+#
+pred.freq.age = matrix(0,nrow=length(data.cells), ncol= length(uniq.age.grp), dimnames=list(data.cells, uniq.age.grp))
+pred.freq.age = set_pair_matrix(pred.freq.age, data.cells, (pred.age.df[data.cells,"pred.age"]), rep(1, length(data.cells)))
+
+#
+knn.result.age = get_knn(umap.all, umap.all, k=10,method="Annoy.Euclidean",transposed=FALSE, return.distance=TRUE)
+  w= knn.result.age$knn.distance
+  w = w - rowMaxs(w)
+  w = -w/rowMaxs(abs(w))
+  w = w/rowSums(w)
+  knn.index.age=knn.result.age[[1]]
+  pred.freq.age.new= impute_knn(knn.index.age, reference=data.cells, dat=pred.freq.age, w=w,transpose_input=TRUE, transpose_output=TRUE)
+  
+#
+
+pred.freq.age.new[is.na(pred.freq.age.new)] <- 0
+    max.age.freq <- apply(pred.freq.age.new, 1, which.max)
+    pred.age <- colnames(pred.freq.age.new)[max.age.freq]
+    pred.age <- setNames(pred.age, row.names(pred.freq.age.new))
+    pred.age.score <- apply(pred.freq.age.new, 1, max)
+    pred.age.df <- data.frame(pred.age = pred.age, 
+                          pred.score = pred.age.score)
+    save(pred.age.df,file=paste0(pred.age.time_i,".rda"))
+    
+    pred.age.df.list[[pred.age.time_i]] = pred.age.df
+}
+save(pred.age.df.list,file="pred.age.df.list.rda")
+
+for(kk in 3:length(pred_time_iter)){
+  
+  pred.age.time_i = pred_time_iter[kk]
+  pred.age.time_j = pred_time_iter[kk-1]
+  print(c(pred.age.time_i,pred.age.time_j))
+  
+  names(pred.age.df.list[[pred.age.time_i]]) = paste0(names(pred.age.df.list[[pred.age.time_i]]),".",kk)
+}
+
+pred.age.df.iter = do.call(cbind, pred.age.df.list)
+pred.age.df.iter$sample_id = rownames(pred.age.df.iter)
+metadata = left_join(metadata,pred.age.df.iter)
+
+```
+
+## Step1 create seurat object at each age bin
+```{r cars}
+library(Seurat)
+library(future.apply)
+library(ggplot2)
+source("Build_trajectory.R")
+
+time_point = c("E11.5_E12.5","E13.5_E16.5","E17_E18.5","0_1","2" ,"3","4",
+               "5_6","7_8","9","10","11","12_13","14_15","16","17_19","20_28","54_68")
+
+
+for(i in 1:17){
+
+
+age_cells = metadata %>% filter(age.bin.10 == time_point[i])%>% pull(sample_id)
+
+time_x = time_point[i]
+print(time_x)
+  
+
+  mat_age_cells= cbind(mat.list[[1]][,intersect(age_cells,colnames(mat.list[[1]]))],
+           mat.list[[2]][,intersect(age_cells,colnames(mat.list[[2]]))],
+           mat.list[[3]][,intersect(age_cells,colnames(mat.list[[3]]))],
+           mat.list[[4]][,intersect(age_cells,colnames(mat.list[[4]]))])
+  
+  obj_x <- CreateSeuratObject(counts = mat_age_cells[select.genes,], project = time_x)
+  
+  meta_data_x = metadata[rownames(obj_x[[]]),]
+  obj_x <- AddMetaData(
+    object = obj_x,
+    metadata = meta_data_x,
+    col.name = colnames(meta_data_x)
+  )
+  saveRDS(obj_x,file=paste0("seurat_object_", time_x, ".rds"))
+  savePath = paste0(time_x,"_resolution_")
+  obj.processed = SeuratClustering(obj_x,nfeatures = 2000,resolution = seq(2,8,2), savePath=savePath)
+  saveRDS(obj.processed,file=paste0("seurat_object_processed_", time_x, "_resolution.rds"))# using different resolution
+  
+}
+
+
+
+```
+
+
+## Step2 label transfer and intgrating between age.bin
+
+```{r cars}
+for(kk in 1:17){
+  
+  time_1 = time_point[kk]
+  time_2 = time_point[kk + 1]
+  
+  print(c(time_1,time_2))
+  
+  
+  ### adding both time information
+  
+  obj_1 = readRDS(paste0(work_path, "/seurat_object_", time_1, ".rds"))
+  obj_1$group = obj_1$age.bin.10#obj_1$library_prep 
+  #obj_1$group = paste0(age.bin.10, "_", obj_1$group)
+  
+  obj_2 = readRDS(paste0(work_path, "/seurat_object_", time_2, ".rds"))
+  obj_2$group = obj_2$age.bin.10#obj_2$library_prep 
+  #obj_2$group = paste0(age.bin.10, "_", obj_2$group)
+
+  
+  
+obj_1 <- NormalizeData(obj_1)
+
+obj_2 <- NormalizeData(obj_2)
+obj_2 <- FindVariableFeatures(obj_2)
+obj_2 <- ScaleData(obj_2)
+obj_2 <- RunPCA(obj_2)
+obj_2 <- FindNeighbors(obj_2, dims = 1:30)
+obj_2 <- FindClusters(obj_2)
+
+obj.anchors <- FindTransferAnchors(reference = obj_2, query = obj_1, dims = 1:30,reduction="rpca")
+predictions <- TransferData(anchorset = obj.anchors, refdata = obj_2$cluster_label, dims = 1:30)
+obj_1 <- AddMetaData(obj_1, metadata = predictions)
+
+  obj = merge(obj_1, obj_2)
+ 
+  
+  DefaultAssay(object = obj) <- "RNA"
+  if(time_2 %in% "21" | time_1 %in% "21" ){
+    
+    obj.integrated = SeuratClustering(obj)
+    
+  } else {
+    
+    obj.list <- SplitObject(obj, split.by = "group")
+    obj.list <- future_lapply(X = obj.list, FUN = function(x) {
+      DefaultAssay(object = x) <- "RNA"
+      x <- NormalizeData(x, verbose = FALSE)
+      x <- FindVariableFeatures(x, verbose = FALSE)
+    })
+    
+    features <- SelectIntegrationFeatures(object.list = obj.list,nfeatures = 2000)
+    # using features from seurat
+    obj.list <- future_lapply(X = obj.list, FUN = function(x) {
+      x <- ScaleData(x, features = features, verbose = FALSE)
+      x <- RunPCA(x, features = features, verbose = FALSE)
+    })
+
+    anchors <- FindIntegrationAnchors(object.list = obj.list, reduction = "rpca", 
+                                      dims = 1:50,anchor.features = features)
+    
+    obj.integrated <- IntegrateData(anchorset = anchors, dims = 1:50)
+    
+    obj.integrated <- ScaleData(obj.integrated, verbose = FALSE)
+    obj.integrated <- RunPCA(obj.integrated, npcs = 50, verbose = FALSE)
+    obj.integrated <- RunUMAP(obj.integrated, dims = 1:50, n.components = 3,reduction.name = "umap3d", min.dist = 0.75)
+    obj.integrated <- RunUMAP(obj.integrated, dims = 1:50, n.components = 2, reduction.name = "umap2d",min.dist = 0.75)
+    obj.integrated <- FindNeighbors(obj.integrated, reduction = "pca", dims = 1:50)
+    obj.integrated <- FindClusters(obj.integrated, resolution = seq(2,8,2),save.SNN = T, do.sparse = T)
+  }
+  
+  saveRDS(obj.integrated, paste0(work_path, "/", time_1, "_", time_2, ".rds"))
+  
+  emb = data.frame(Embeddings(object = obj.integrated, reduction = "umap3d"))
+  saveRDS(emb, file=paste0("./", time_1, "_", time_2, "_umap3d.rds"))
+  
+  emb = data.frame(Embeddings(object = obj.integrated, reduction = "umap2d"))
+  saveRDS(emb, file=paste0("./", time_1, "_", time_2, "_umap2d.rds"))
+  
+  emb = data.frame(Embeddings(object = obj.integrated, reduction = "pca"))
+  saveRDS(emb, file=paste0("./", time_1, "_", time_2,"_pca.rds"))
+  
+  plot_cl = DimPlot(obj.integrated, reduction = "umap2d",group.by = "age.bin.10",split.by="age.bin.10")
+  ggsave(plot_cl, file=paste0("./", time_1, "_", time_2,"_plot_lib.png"),height=15, width=20)
+
+
+}
+
+```
+

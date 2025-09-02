@@ -1,0 +1,96 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+
+
+
+## Step3 build trajectory
+```{r}
+
+library(FNN)
+rd = "pca"
+for(r in rd){
+  for(kk in c(17:1)){
+  
+time_i = merged_time_point[kk]
+time_j = merged_time_point[kk+1]
+print(c(r,time_i,time_j))
+#print(time_j)
+
+pca = readRDS(paste0(work_path, "/", time_i, "_", time_j, "_","pca",".rds"))
+pca = data.frame(pca)
+
+anno1 = readRDS(paste0(work_path, "/seurat_object_", time_i, ".rds"))
+v2.anno.1 = v2.anno.all[rownames(anno1[[]]),]
+anno1 <- AddMetaData(
+    object = anno1,
+    metadata = v2.anno.1,
+    col.name = colnames(v2.anno.1)
+  )
+
+anno1.v2.SH = anno1
+anno1.v2.SH.refined = anno1
+
+#for v2.SH
+anno1.v2.SH$labels = anno1.v2.SH$cluster_label
+anno1.v2.SH = anno1.v2.SH@meta.data
+anno1.v2.SH$day = "pretime"
+anno1.v2.SH$age.period = time_i
+
+#for v2.SH.refine
+anno1.v2.SH.refined$labels = anno1.v2.SH.refined$cluster_label
+anno1.v2.SH.refined = anno1.v2.SH.refined@meta.data
+anno1.v2.SH.refined$day = "pretime"
+anno1.v2.SH.refined$age.period = time_i
+
+
+
+anno2 = readRDS(paste0("/seurat_object_", time_j, ".rds"))
+v2.anno.2 = v2.anno.all[rownames(anno2[[]]),]
+anno2 <- AddMetaData(
+    object = anno2,
+    metadata = v2.anno.2,
+    col.name = colnames(v2.anno.2)
+  )
+
+anno2.v2.SH = anno2
+anno2.v2.SH.refined = anno2
+
+
+#for v2.SH
+anno2.v2.SH$labels = anno2.v2.SH$cluster_label
+anno2.v2.SH = anno2.v2.SH@meta.data
+anno2.v2.SH$day = "nextime"
+anno2.v2.SH$age.period = time_j
+
+#for v2.SH.refine
+anno2.v2.SH.refined$labels = anno2.v2.SH.refined$cluster_label
+anno2.v2.SH.refined = anno2.v2.SH.refined@meta.data
+anno2.v2.SH.refined$day = "nextime"
+anno2.v2.SH.refined$age.period = time_j
+
+
+anno.v2.SH = rbind(anno1.v2.SH, anno2.v2.SH)
+
+anno.v2.SH.refined = rbind(anno1.v2.SH.refined, anno2.v2.SH.refined)
+
+
+anno.v2.SH = anno.v2.SH[rownames(pca),]
+anno.v2.SH.refined = anno.v2.SH.refined[rownames(pca),]
+
+res_v2.SH = BuildTrajectory(pca, anno.v2.SH,  replication_times=100, removing_cells_ratio=0.05, k_neigh = 20,replace = FALSE) 
+saveRDS(res_v2.SH, paste0("./SH_Lineage/", time_i, "_", time_j, "_v2.SH","_Knn_",r,".rds"))
+
+
+res_v2.SH.refined = BuildTrajectory(pca, anno.v2.SH.refined,  replication_times=100, removing_cells_ratio=0.05, k_neigh = 20,replace = FALSE) 
+saveRDS(res_v2.SH.refined, paste0("./SH.refined_Lineage/", time_i, "_", time_j, "_v2.SH.refined","_Knn_",r,".rds"))
+
+
+
+}
+
+}
+```

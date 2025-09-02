@@ -1,0 +1,115 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+
+
+
+## Step3 build trajectory
+```{r}
+setwd("/allen/programs/celltypes/workgroups/mct-t200/Manuscript/2023_Yuan_VIS/Initial_submission/Figures/Figure2/genemoduleclassv2")
+de.param = de_param(q1.th=0.3,q.diff=0.5)
+class.cl = with(local.cl.df, setNames(class_id_local, cl_AIT21_merge_v5))
+class.label = with(local.cl.df, setNames(class_label_local, cl_AIT21_merge_v5))
+
+subclass.cl = with(local.cl.df, setNames(class_id_local, cl_AIT21_merge_v5))
+subclass.label = with(local.cl.df, setNames(class_label_local, cl_AIT21_merge_v5))
+
+supertype.cl = with(local.cl.df, setNames(class_id_local, cl_AIT21_merge_v5))
+supertype.label = with(local.cl.df, setNames(class_label_local, cl_AIT21_merge_v5))
+
+selected.cl = local.cl.df %>% filter(!class_label_local %in% c("OEC","nonCTX")) %>% pull(cl_AIT21_merge_v5)
+class.de = list()
+class.markers=list()
+class.markers.default=list()
+for(x in levels(age.bin)){
+  print(x)
+  x = gsub(":","_",x)
+  tmp.cl = local.cl.df %>% filter(!class_label_local %in% c("OEC","nonCTX") & max.pred.age==x) %>% pull(cl_AIT21_merge_v5)
+  tmp.cells = sample_cells(cl[cl %in% tmp.cl], 1000)
+  tmp2.cl = setNames(class.cl[as.character(cl[tmp.cells])], tmp.cells)
+  tmp2.label = setNames(class.label[as.character(cl[tmp.cells])], tmp.cells)
+  class.stats =  get_cl_stats_big(big.dat, tmp2.cl, max.cl.size=10000, stats=c("means","sqr_means","present"),mc.cores=10, genes.allowed=setdiff(big.dat$row_id, sex.genes))
+  class.de[[x]] = de_all_pairs(norm.dat=NULL,
+                                  cl=tmp2.cl, 
+                                  cl.means = class.stats$means, 
+                                  cl.present =class.stats$present, 
+                                  cl.sqr.means =class.stats$sqr_means, 
+                                  #de.param = de.param,
+                                  out.dir=paste0("de_parquet_age_v2",x), #de_parquet_age_v2 is without de.param setting
+                                  summary.dir=paste0("de_summary_age_v2",x),mc.cores=10)
+  ds = open_dataset(paste0("de_parquet_age_v2",x))
+  class.markers[[x]] = ds %>% filter(rank < 15 & lfc > 1.5) %>% pull(gene) %>% unique
+  class.markers.default[[x]] = ds %>% filter(rank < 20) %>% pull(gene) %>% unique#select_markers(norm.dat=NULL, cl=tmp2.cl, de.genes=subclass.de[[x]])$markers  
+}
+
+age.de=list()
+age.markers=list()
+age.markers.default=list()
+for(x in unique(local.cl.df %>% filter(!class_label_local %in% c("OEC","nonCTX")) %>% pull(class_label_local))){
+  print(x)
+  #tmp.cells = sample_cells(cl[cl %in% tmp.cl], 1000)
+  #tmp2.cl = setNames(class.cl[as.character(cl[tmp.cells])], tmp.cells)
+  
+  tmp.cl = local.cl.df %>% filter(class_label_local %in% x) %>% pull(cl_AIT21_merge_v5)  
+  tmp2.cl = droplevels(age.bin[names(cl)[cl %in% tmp.cl]])
+  tmp2.cells = sample_cells(tmp2.cl, 2000)
+  tmp3.cl = tmp2.cl[tmp2.cells]
+  
+  if(length(table(tmp2.cl))>1){
+    age.stats =  get_cl_stats_big(big.dat, tmp3.cl, 
+                                max.cl.size=5000, 
+                                stats=c("means","sqr_means","present"),
+                                mc.cores=10, 
+                                genes.allowed=setdiff(big.dat$row_id, sex.genes))
+  age.de[[x]] = de_all_pairs(norm.dat=NULL,
+                                cl = tmp3.cl, 
+                                cl.means = age.stats$means, 
+                                cl.present = age.stats$present, 
+                                cl.sqr.means = age.stats$sqr_means, 
+                                out.dir=paste0("de_parquet_class_",x), 
+                                summary.dir=paste0("de_summary_class_",x),mc.cores=10)
+  ds = open_dataset(paste0("de_parquet_class_",x))
+  if(file.size(paste0("de_parquet_class_",x))>0){
+    age.markers[[x]] = ds %>% filter(rank < 15 & lfc > 1.5) %>% pull(gene) %>% unique 
+  age.markers.default[[x]] = ds %>% filter(rank < 20) %>% pull(gene) %>% unique#select_markers(norm.dat=NULL, cl=tmp2.cl, de.genes=IT.age.de[[x]])$markers  
+  }
+  
+  }
+  
+}
+
+#
+comb.markers = unique(union(unique(unlist(class.markers)), unique(unlist(age.markers))))
+#
+comb.markers.default = unique(union(unique(unlist(class.markers.default)), unique(unlist(age.markers.default))))
+save(comb.markers,comb.markers.default,file="/allen/programs/celltypes/workgroups/mct-t200/Manuscript/2023_Yuan_VIS/Initial_submission/Figures/Figure2/genemoduleclassv2/comb.markers.default.rda")
+
+select.cl = local.cl.df %>% filter(!class_label_local %in% c("OEC","nonCTX")) %>% filter(!subclass_label_local %in% c("Lymphoid NN","ABC NN")) %>% arrange(class_id_local, monocle.pst.combined) %>% pull(cl_AIT21_merge_v5) %>% as.character()
+tmp.cells = sample_cells(cl[cl %in% select.cl],200)
+tmp.dat = as.matrix(get_cols(big.dat, tmp.cells,comb.markers.default))
+std.tmp.dat = tmp.dat/rowMaxs(tmp.dat)
+
+#
+monocle.pst.combined = with(anno.df, setNames(monocle.f.pst.combined, sample_id))
+monocle.pst.combined = monocle.pst.combined[!is.na(monocle.pst.combined)]
+monocle.pst = with(anno.df, setNames(monocle.f.pst, sample_id))
+monocle.pst = monocle.pst[!is.na(monocle.pst)]
+#
+marker.age = apply(tmp.dat, 1, function(x){
+  sum(x * as.integer(monocle.pst.combined[tmp.cells]))/sum(x)
+})
+load("/allen/programs/celltypes/workgroups/mct-t200/Manuscript/2023_Yuan_VIS/Initial_submission/Common/genemodule/cl.stats.rda")
+cl.means = cl.stats$means
+mod = get_gene_mod(cl.means[comb.markers.default,select.cl],k=10,resolution=8)
+mod = sort(mod)
+mod.age = tapply(marker.age[names(mod)], mod, mean)
+mod.df = data.frame(mod = names(mod.age),mod.age=mod.age) %>% arrange(mod.age)
+mod.df$mod.id = 1:nrow(mod.df)
+gene.df = data.frame(gene=names(mod), 
+                     mod=as.character(mod),
+                     age=marker.age[names(mod)]) %>% left_join(mod.df) %>% arrange(mod.id, age)
+
+```
