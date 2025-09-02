@@ -1,2 +1,2 @@
 # MouseDevVIS
-Code base used for analyzing Developmental Mouse datasets
+Code base used for analyzing Developmental Mouse VIS datasets
