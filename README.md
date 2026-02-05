@@ -1,2 +1,6 @@
 # MouseDevVIS
-Code base used for analyzing Developmental Mouse VIS datasets
+Code base used for analyzing Developmental Mouse VIS datasets.
+
+Primary data are being made available through BRAIN Initiative Cell Atlas Network (BICAN, RRID: SCR_022794; https://www.portal.brain-bican.org/) and the Neuroscience Multi-omic Data Archive (NeMO, RRID: SCR_016152; https://nemoarchive.org/). The following resources are also available from NeMO: the identifier containing links to all primary data (https://assets.nemoarchive.org/dat-5y9mf0h); the 10x scRNA-seq dataset (https://assets.nemoarchive.org/dat-0oyried); the Multiome snRNA-seq dataset (https://assets.nemoarchive.org/dat-bbqchpq); and the Multiome snATAC-seq dataset (https://assets.nemoarchive.org/dat-5ke3d8i). 
+
+The following resources are also available online: the processed 10x scRNA-seq dataset (https://allen-developmental-mouse-atlas.s3.amazonaws.com/scRNA/DevVIS_scRNA_processed.h5ad); the processed Multiome snRNA-seq dataset (https://allen-developmental-mouse-atlas.s3.us-west-2.amazonaws.com/Multiome/DevVIS_multiome_snRNA_processed.h5ad); the processed Multiome snATAC-seq dataset (https://allen-developmental-mouse-atlas.s3.amazonaws.com/Multiome/DevVIS_multiome_snATAC_processed.h5ad); and the ATAC fragment file https://allen-developmental-mouse-atlas.s3.us-west-2.amazonaws.com/Multiome/ATAC_fragment.tar.gz.
